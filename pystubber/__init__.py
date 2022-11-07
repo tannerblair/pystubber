@@ -1,14 +1,13 @@
+import os
 from dataclasses import dataclass
 from typing import Optional, List
 
 import clr
 clr.AddReference('System')
-clr.AddReference('System.Collections')
 clr.AddReference('System.Reflection')
 clr.AddReference('System.IO')
 
 import System
-from System.Collections import Generic
 from System.Reflection import Assembly
 from System.IO import DirectoryInfo, Directory, Path, File
 from System import AppDomain, Enum, Convert, Type
@@ -98,157 +97,155 @@ class StubBuilder:
     def _write_stub_list(self, root_directory, all_namespaces, stub_types):
         # TODO Fix this later -- stub_types.sort()
         ns = stub_types[0].Namespace.split('.')
-        path = root_directory.FullName
-        for idx in range(len(ns)):
-            path = Path.Combine(path, ns[idx])
+        path = root_directory.FullName + '/' + "/".join(ns)
 
-        if not Directory.Exists(path):
-            Directory.CreateDirectory(path)
+        if not os.path.isdir(path):
+            os.makedirs(path)
 
-        init_path = Path.Combine(path, "__init__.py")
-        path = Path.Combine(path, "__init__.pyi")
+        init_path = path + "/__init__.py"
+        path = path + "/__init__.pyi"
 
-        init_text = f"""
-import clr
+        init_text = f"""import clr
 clr.AddReference('{self._target_assembly_path}')
 
 from {stub_types[0].Namespace} import *
-                """
-        File.WriteAllText(init_path, init_text)
+"""
+        with open(init_path, 'w') as f:
+            f.write(init_text)
 
         sb = ""
-        all_child_namespaces = self._get_child_namespaces(stub_types[0].Namespace, all_namespaces)
-        if all_child_namespaces:
-            sb += "__all__ = [\n"
-            for idx in range(len(all_child_namespaces)):
-                if idx > 0:
-                    sb += ','
-                sb += f"{all_child_namespaces[idx]}"
-            sb += "]\n"
-
-        sb += "from typing import Tuple, Set, Iterable, List, overload\n"
-
-        for stub_type in stub_types:
-            #TODO obsolete = stub_type.GetCustomAttribute(type(System.ObsoleteAttribute))
-            sb += "\n\n"
-
-            if stub_type.IsGenericType:
-                continue
-
-            if stub_type.IsEnum:
-                sb += f"class {stub_type.Name}:\n"
-                names = Enum.GetNames(stub_type)
-                values = Enum.GetValues(stub_type)
-
-                for idx in range(len(names)):
-                    name = names[idx]
-                    if name == "None":
-                        name = "#None"
-                    val = Convert.ChangeType(values[idx], Type.GetTypeCode(stub_type))
-                    sb += f"\t{name} = {val}\n"
-                continue
-
-            if stub_type.BaseType:
-                if stub_type.BaseType.FullName.startswith(ns[0]) and not "+" in stub_type.BaseType.FullName and not \
-                        "`" in stub_type.BaseType.FullName:
-                    sb += f"class {stub_type.Name}({stub_type.BaseType.Name}):\n"
-                else:
-                    sb += f"class {stub_type.Name}:\n"
-            class_start = sb
-
-            constructors = stub_type.GetConstructors()
-            #TODO Array.Sort(constructors, MethodCompare);
-
-            for constructor in constructors:
-                if len(constructors) > 1:
-                    sb += "\t@overload\n"
-                sb += "\tdef __init__(self"
-                parameters = constructor.GetParameters()
-                for idx in range(len(parameters)):
-                    if idx == 0:
-                        sb += ", "
-                    sb += f"{self._safe_python_name(parameters[idx].Name)}: " \
-                          f"{self._to_python_type(parameters[idx].ParameterType)}"
-                    if idx < len(parameters) - 1:
-                        sb += ", "
-                sb += "): ...\n"
-
-            methods = stub_type.GetMethods()
-            # TODO Array.Sort(methods, MethodCompare);
-            method_names = {}
-            for method in methods:
-                # TODO check if obsolete
-                if method.Name in method_names:
-                    method_names[method.Name] += 1
-                else:
-                    method_names[method.Name] = 1
-
-            for method in methods:
-                # TODO check if obsolete
-                if method.DeclaringType != stub_type:
+        with open(path, 'w') as f:
+            all_child_namespaces = self._get_child_namespaces(stub_types[0].Namespace, all_namespaces)
+            if all_child_namespaces:
+                f.write("__all__ = [\n")
+                for idx in range(len(all_child_namespaces)):
+                    if idx > 0:
+                        f.write(',')
+                    f.write(f"{all_child_namespaces[idx]}")
+                f.write("]\n")
+    
+            f.write("from typing import Tuple, Set, Iterable, List, overload\n")
+    
+            for stub_type in stub_types:
+                #TODO obsolete = stub_type.GetCustomAttribute(type(System.ObsoleteAttribute))
+                f.write("\n\n")
+    
+                if stub_type.IsGenericType:
                     continue
-                parameters = method.GetParameters()
-                out_param_count = 0
-                ref_param_count = 0
-                for parameter in parameters:
-                    if parameter.IsOut:
-                        out_param_count += 1
-                    elif (parameter.ParameterType.IsByRef):
-                        ref_param_count += 1
-
-                if method.IsSpecialName and method.Name.startswith("get_") or method.Name.startswith("set_"):
-                    prop_name = method.Name[4:]
-                    if method.Name.startswith("get_"):
-                        sb += "\t@property\n"
+    
+                if stub_type.IsEnum:
+                    f.write(f"class {stub_type.Name}:\n")
+                    names = Enum.GetNames(stub_type)
+                    values = Enum.GetValues(stub_type)
+    
+                    for idx in range(len(names)):
+                        name = names[idx]
+                        if name == "None":
+                            name = "#None"
+                        val = Convert.ChangeType(values[idx], Type.GetTypeCode(stub_type))
+                        f.write(f"\t{name} = {val}\n")
+                    continue
+    
+                if stub_type.BaseType:
+                    if stub_type.BaseType.FullName.startswith(ns[0]) and not "+" in stub_type.BaseType.FullName and not \
+                            "`" in stub_type.BaseType.FullName:
+                        f.write(f"class {stub_type.Name}({stub_type.BaseType.Name}):\n")
                     else:
-                        sb += f"\t@{prop_name}.setter\n"
-                    sb += f"\tdef {prop_name}("
-                else:
-                    if method.IsStatic:
-                        sb += "\t@staticmethod\n"
-                    if method_names[method.Name] > 1:
-                        sb += "\t@overload\n"
-                    sb += f"\tdef {method.Name}("
-
-                add_comma = False
-                if not method.IsStatic:
-                    sb += "self"
-                    add_comma = True
-                for idx in range(len(parameters)):
-                    if parameters[idx].IsOut:
+                        f.write(f"class {stub_type.Name}:\n")
+                class_start = sb
+    
+                constructors = stub_type.GetConstructors()
+                #TODO Array.Sort(constructors, MethodCompare);
+    
+                for constructor in constructors:
+                    if len(constructors) > 1:
+                        f.write("\t@overload\n")
+                    f.write("\tdef __init__(self")
+                    parameters = constructor.GetParameters()
+                    for idx in range(len(parameters)):
+                        if idx == 0:
+                            f.write(", ")
+                        f.write(f"{self._safe_python_name(parameters[idx].Name)}: " \
+                              f"{self._to_python_type(parameters[idx].ParameterType)}")
+                        if idx < len(parameters) - 1:
+                            f.write(", ")
+                    f.write("): ...\n")
+    
+                methods = stub_type.GetMethods()
+                # TODO Array.Sort(methods, MethodCompare);
+                method_names = {}
+                for method in methods:
+                    # TODO check if obsolete
+                    if method.Name in method_names:
+                        method_names[method.Name] += 1
+                    else:
+                        method_names[method.Name] = 1
+    
+                for method in methods:
+                    # TODO check if obsolete
+                    if method.DeclaringType != stub_type:
                         continue
-
-                    if add_comma:
-                        sb += ", "
-                    sb += f"{self._safe_python_name(parameters[idx].Name)}: " \
-                          f"{self._to_python_type(parameters[idx].ParameterType)}"
-                    add_comma = True
-                sb += ")"
-
-                types = []
-                if method.ReturnType is None:
+                    parameters = method.GetParameters()
+                    out_param_count = 0
+                    ref_param_count = 0
+                    for parameter in parameters:
+                        if parameter.IsOut:
+                            out_param_count += 1
+                        elif (parameter.ParameterType.IsByRef):
+                            ref_param_count += 1
+    
+                    if method.IsSpecialName and method.Name.startswith("get_") or method.Name.startswith("set_"):
+                        prop_name = method.Name[4:]
+                        if method.Name.startswith("get_"):
+                            f.write("\t@property\n")
+                        else:
+                            f.write(f"\t@{prop_name}.setter\n")
+                        f.write(f"\tdef {prop_name}(")
+                    else:
+                        if method.IsStatic:
+                            f.write("\t@staticmethod\n")
+                        if method_names[method.Name] > 1:
+                            f.write("\t@overload\n")
+                        f.write(f"\tdef {method.Name}(")
+    
+                    add_comma = False
+                    if not method.IsStatic:
+                        f.write("self")
+                        add_comma = True
+                    for idx in range(len(parameters)):
+                        if parameters[idx].IsOut:
+                            continue
+    
+                        if add_comma:
+                            f.write(", ")
+                        f.write(f"{self._safe_python_name(parameters[idx].Name)}: {self._to_python_type(parameters[idx].ParameterType)}")
+                        add_comma = True
+                    f.write(")")
+    
+                    types = []
+                    if method.ReturnType is None:
+                        if not out_param_count and not ref_param_count:
+                            types.append("None")
+                    else:
+                        types.append(self._to_python_type(method.ReturnType))
+                    for p in parameters:
+    
+                        if p.IsOut or p.ParameterType.IsByRef:
+                            types.append(self._to_python_type(p.ParameterType))
+                    f.write(" -> ")
                     if not out_param_count and not ref_param_count:
-                        types.append("None")
-                else:
-                    types.append(self._to_python_type(method.ReturnType))
-                for p in parameters:
-
-                    if p.IsOut or p.ParameterType.IsByRef:
-                        types.append(self._to_python_type(p.ParameterType))
-                sb += " -> "
-                if not out_param_count and not ref_param_count:
-                    sb += types[0]
-                else:
-                    sb += "Tuple["
-                    for idx in range(len(types)):
-                        if idx > 0:
-                            sb += ", "
-                        sb += types[idx]
-                    sb += "]"
-                sb += ":...\n"
-            if len(sb) == len(class_start):
-                sb += "\tpass"
-        File.WriteAllText(path, sb)
+                        f.write(types[0])
+                    else:
+                        f.write("Tuple[")
+                        for idx in range(len(types)):
+                            if idx > 0:
+                                f.write(", ")
+                            f.write(types[idx])
+                        f.write("]")
+                    f.write(":...\n")
+                if len(sb) == len(class_start):
+                    f.write("\tpass")
+            # File.WriteAllText(path, sb)
 
     def _safe_python_name(self, s: str):
         if s == "from":
