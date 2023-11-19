@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Tuple
+import System.Reflection
 
 
 @dataclass
@@ -661,3 +662,9 @@ class TypeInfo:
 
     def __str__(self):
         return str({k: str(v) for k, v in asdict(self).items()})
+
+
+def parse_dotnet(target_assembly) -> Assembly:
+    assembly_to_stub = System.Reflection.Assembly.LoadFrom(target_assembly)
+
+    return Assembly.from_dotnet(assembly_to_stub)

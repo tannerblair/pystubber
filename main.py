@@ -1,16 +1,11 @@
-# This is a sample Python script.
+from pprint import pprint
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+import dotnetwrapper.dotnetparser as parser
 
+target_assembly = "C:/Program Files/National Instruments/VeriStand 2021/NationalInstruments.VeriStand.SystemDefinitionAPI.dll"
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f"Hi, {name}")  # Press Ctrl+F8 to toggle the breakpoint.
+assem = parser.parse_dotnet(target_assembly)
 
+target = (assem.defined_types[assem.exported_types[0]])
 
-# Press the green button in the gutter to run the script.
-if __name__ == "__main__":
-    print_hi("PyCharm")
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+print(target.full_name)
