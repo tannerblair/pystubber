@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from typing import Optional, List
 
 import clr
-clr.AddReference('System')
-clr.AddReference('System.Reflection')
-clr.AddReference('System.IO')
+
+clr.AddReference("System")
+clr.AddReference("System.Reflection")
+clr.AddReference("System.IO")
 
 import System
 from System.Reflection import Assembly
@@ -26,11 +27,11 @@ class StubBuilder:
         self._target_assembly_path = None
 
     def build_assembly_stubs(
-            self,
-            target_assembly_path: str,
-            dest_path: Optional[str] = None,
-            search_paths: List[str] = None,
-            cfgs: Optional[BuildConfig] = None
+        self,
+        target_assembly_path: str,
+        dest_path: Optional[str] = None,
+        search_paths: List[str] = None,
+        cfgs: Optional[BuildConfig] = None,
     ):
         self._target_assembly_path = target_assembly_path
         # prepare configs
@@ -48,17 +49,21 @@ class StubBuilder:
 
         # extract types
         types_to_stub = assembly_to_stub.GetExportedTypes()
-        root_namespace = types_to_stub[0].Namespace.split('.')[0]
+        root_namespace = types_to_stub[0].Namespace.split(".")[0]
 
-        #prepare output directory
+        # prepare output directory
         if cfgs.dest_path_is_root and Directory.Exists(dest_path):
             stubs_directory = DirectoryInfo(dest_path)
         else:
             extended_root_namespace = cfgs.prefix + root_namespace + cfgs.postfix
             if dest_path is None or not Directory.Exists(dest_path):
-                stubs_directory = Directory.CreateDirectory(f'../{extended_root_namespace}')
+                stubs_directory = Directory.CreateDirectory(
+                    f"../{extended_root_namespace}"
+                )
             else:
-                stubs_directory = Directory.CreateDirectory(Path.Combine(dest_path, extended_root_namespace))
+                stubs_directory = Directory.CreateDirectory(
+                    Path.Combine(dest_path, extended_root_namespace)
+                )
 
         # build type db
         stub_dictionary = {}
@@ -72,7 +77,6 @@ class StubBuilder:
         # generate stubs for each type
         for stub_list in stub_dictionary.values():
             self._write_stub_list(stubs_directory, namespaces, stub_list)
-
 
         # update the setup.py version with the matching version of the assembly
         parent_directory = stubs_directory.Parent
@@ -88,7 +92,7 @@ class StubBuilder:
         return stubs_directory.FullName
 
     def _assembly_resolve(self, sender, args):
-        assembly_to_resolve = args.Name.split(',')[0] + ".dll"
+        assembly_to_resolve = args.Name.split(",")[0] + ".dll"
         for search_path in self._search_paths:
             assembly_path = Path.Combine(search_path, assembly_to_resolve)
             if File.Exists(assembly_path):
@@ -96,8 +100,8 @@ class StubBuilder:
 
     def _write_stub_list(self, root_directory, all_namespaces, stub_types):
         # TODO Fix this later -- stub_types.sort()
-        ns = stub_types[0].Namespace.split('.')
-        path = root_directory.FullName + '/' + "/".join(ns)
+        ns = stub_types[0].Namespace.split(".")
+        path = root_directory.FullName + "/" + "/".join(ns)
 
         if not os.path.isdir(path):
             os.makedirs(path)
@@ -110,53 +114,60 @@ clr.AddReference('{self._target_assembly_path}')
 
 from {stub_types[0].Namespace} import *
 """
-        with open(init_path, 'w') as f:
+        with open(init_path, "w") as f:
             f.write(init_text)
 
         sb = ""
-        with open(path, 'w') as f:
-            all_child_namespaces = self._get_child_namespaces(stub_types[0].Namespace, all_namespaces)
+        with open(path, "w") as f:
+            all_child_namespaces = self._get_child_namespaces(
+                stub_types[0].Namespace, all_namespaces
+            )
             if all_child_namespaces:
                 f.write("__all__ = [\n")
                 for idx in range(len(all_child_namespaces)):
                     if idx > 0:
-                        f.write(',')
+                        f.write(",")
                     f.write(f"{all_child_namespaces[idx]}")
                 f.write("]\n")
-    
+
             f.write("from typing import Tuple, Set, Iterable, List, overload\n")
-    
+
             for stub_type in stub_types:
-                #TODO obsolete = stub_type.GetCustomAttribute(type(System.ObsoleteAttribute))
+                # TODO obsolete = stub_type.GetCustomAttribute(type(System.ObsoleteAttribute))
                 f.write("\n\n")
-    
+
                 if stub_type.IsGenericType:
                     continue
-    
+
                 if stub_type.IsEnum:
                     f.write(f"class {stub_type.Name}:\n")
                     names = Enum.GetNames(stub_type)
                     values = Enum.GetValues(stub_type)
-    
+
                     for idx in range(len(names)):
                         name = names[idx]
                         if name == "None":
                             name = "#None"
-                        val = Convert.ChangeType(values[idx], Type.GetTypeCode(stub_type))
+                        val = Convert.ChangeType(
+                            values[idx], Type.GetTypeCode(stub_type)
+                        )
                         f.write(f"\t{name} = {val}\n")
                     continue
-    
+
                 if stub_type.BaseType:
-                    if stub_type.BaseType.FullName.startswith(ns[0]) and not "+" in stub_type.BaseType.FullName and not \
-                            "`" in stub_type.BaseType.FullName:
+                    if (
+                        stub_type.BaseType.FullName.startswith(ns[0])
+                        and not "+" in stub_type.BaseType.FullName
+                        and not "`" in stub_type.BaseType.FullName
+                    ):
                         f.write(f"class {stub_type.Name}({stub_type.BaseType.Name}):\n")
                     else:
                         f.write(f"class {stub_type.Name}:\n")
                 class_start = sb
-    
+
                 constructors = stub_type.GetConstructors()
-                #TODO Array.Sort(constructors, MethodCompare);
-    
+                # TODO Array.Sort(constructors, MethodCompare);
+
                 for constructor in constructors:
                     if len(constructors) > 1:
                         f.write("\t@overload\n")
@@ -165,12 +176,14 @@ from {stub_types[0].Namespace} import *
                     for idx in range(len(parameters)):
                         if idx == 0:
                             f.write(", ")
-                        f.write(f"{self._safe_python_name(parameters[idx].Name)}: " \
-                              f"{self._to_python_type(parameters[idx].ParameterType)}")
+                        f.write(
+                            f"{self._safe_python_name(parameters[idx].Name)}: "
+                            f"{self._to_python_type(parameters[idx].ParameterType)}"
+                        )
                         if idx < len(parameters) - 1:
                             f.write(", ")
                     f.write("): ...\n")
-    
+
                 methods = stub_type.GetMethods()
                 # TODO Array.Sort(methods, MethodCompare);
                 method_names = {}
@@ -180,7 +193,7 @@ from {stub_types[0].Namespace} import *
                         method_names[method.Name] += 1
                     else:
                         method_names[method.Name] = 1
-    
+
                 for method in methods:
                     # TODO check if obsolete
                     if method.DeclaringType != stub_type:
@@ -191,10 +204,14 @@ from {stub_types[0].Namespace} import *
                     for parameter in parameters:
                         if parameter.IsOut:
                             out_param_count += 1
-                        elif (parameter.ParameterType.IsByRef):
+                        elif parameter.ParameterType.IsByRef:
                             ref_param_count += 1
-    
-                    if method.IsSpecialName and method.Name.startswith("get_") or method.Name.startswith("set_"):
+
+                    if (
+                        method.IsSpecialName
+                        and method.Name.startswith("get_")
+                        or method.Name.startswith("set_")
+                    ):
                         prop_name = method.Name[4:]
                         if method.Name.startswith("get_"):
                             f.write("\t@property\n")
@@ -207,7 +224,7 @@ from {stub_types[0].Namespace} import *
                         if method_names[method.Name] > 1:
                             f.write("\t@overload\n")
                         f.write(f"\tdef {method.Name}(")
-    
+
                     add_comma = False
                     if not method.IsStatic:
                         f.write("self")
@@ -215,13 +232,15 @@ from {stub_types[0].Namespace} import *
                     for idx in range(len(parameters)):
                         if parameters[idx].IsOut:
                             continue
-    
+
                         if add_comma:
                             f.write(", ")
-                        f.write(f"{self._safe_python_name(parameters[idx].Name)}: {self._to_python_type(parameters[idx].ParameterType)}")
+                        f.write(
+                            f"{self._safe_python_name(parameters[idx].Name)}: {self._to_python_type(parameters[idx].ParameterType)}"
+                        )
                         add_comma = True
                     f.write(")")
-    
+
                     types = []
                     if method.ReturnType is None:
                         if not out_param_count and not ref_param_count:
@@ -229,7 +248,6 @@ from {stub_types[0].Namespace} import *
                     else:
                         types.append(self._to_python_type(method.ReturnType))
                     for p in parameters:
-    
                         if p.IsOut or p.ParameterType.IsByRef:
                             types.append(self._to_python_type(p.ParameterType))
                     f.write(" -> ")
@@ -256,9 +274,9 @@ from {stub_types[0].Namespace} import *
         if not isinstance(s, str):
             s = s.Name
         if s.endswith("&"):
-            s = s[0: -1]
+            s = s[0:-1]
         if s.endswith("`1") or s.endswith("`2"):
-            s = s[0: -2]
+            s = s[0:-2]
         if s.endswith("[]"):
             partial = self._to_python_type(s[0:-2])
             return f"List[{partial}]"
@@ -281,14 +299,14 @@ from {stub_types[0].Namespace} import *
         child_namespaces = []
         for ns in all_namespaces:
             if ns.startswith(parent_namespace + "."):
-                child_namespace = ns[0:len(parent_namespace) + 1]
-                if '.' not in child_namespace:
+                child_namespace = ns[0 : len(parent_namespace) + 1]
+                if "." not in child_namespace:
                     child_namespaces.append(child_namespace)
         child_namespaces.sort()
         return child_namespaces
 
 
-if __name__ == '__main__':
-    StubBuilder().build_assembly_stubs("C:/Program Files/National Instruments/VeriStand 2020/NationalInstruments.VeriStand.SystemDefinitionAPI.dll")
-
-
+if __name__ == "__main__":
+    StubBuilder().build_assembly_stubs(
+        "C:/Program Files/National Instruments/VeriStand 2020/NationalInstruments.VeriStand.SystemDefinitionAPI.dll"
+    )
