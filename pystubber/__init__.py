@@ -1,4 +1,5 @@
 import os
+import pathlib
 from dataclasses import dataclass
 from typing import Optional, List
 
@@ -27,13 +28,13 @@ class StubBuilder:
         self._target_assembly_path = None
 
     def build_assembly_stubs(
-        self,
-        target_assembly_path: str,
-        dest_path: Optional[str] = None,
-        search_paths: List[str] = None,
-        cfgs: Optional[BuildConfig] = None,
+            self,
+            target_assembly_path: str,
+            dest_path: Optional[str] = None,
+            search_paths: List[str] = None,
+            cfgs: Optional[BuildConfig] = None,
     ):
-        self._target_assembly_path = target_assembly_path
+        self._target_assembly_path = target_assembly_path.replace('\\', '/')
         # prepare configs
         if not cfgs:
             cfgs = BuildConfig()
@@ -62,7 +63,7 @@ class StubBuilder:
                 )
             else:
                 stubs_directory = Directory.CreateDirectory(
-                    Path.Combine(dest_path, extended_root_namespace)
+                    Path.Combine(dest_path, extended_root_namespace).lower()
                 )
 
         # build type db
@@ -102,13 +103,13 @@ class StubBuilder:
         # TODO Fix this later -- stub_types.sort()
         ns = stub_types[0].Namespace.split(".")
         path = root_directory.FullName + "/" + "/".join(ns)
+        path = path.lower()
 
         if not os.path.isdir(path):
             os.makedirs(path)
 
         init_path = path + "/__init__.py"
         path = path + "/__init__.pyi"
-
         init_text = f"""import clr
 clr.AddReference('{self._target_assembly_path}')
 
@@ -133,7 +134,7 @@ from {stub_types[0].Namespace} import *
             f.write("from typing import Tuple, Set, Iterable, List, overload\n")
 
             for stub_type in stub_types:
-                # TODO obsolete = stub_type.GetCustomAttribute(type(System.ObsoleteAttribute))
+
                 f.write("\n\n")
 
                 if stub_type.IsGenericType:
@@ -156,9 +157,9 @@ from {stub_types[0].Namespace} import *
 
                 if stub_type.BaseType:
                     if (
-                        stub_type.BaseType.FullName.startswith(ns[0])
-                        and not "+" in stub_type.BaseType.FullName
-                        and not "`" in stub_type.BaseType.FullName
+                            stub_type.BaseType.FullName.startswith(ns[0])
+                            and not "+" in stub_type.BaseType.FullName
+                            and not "`" in stub_type.BaseType.FullName
                     ):
                         f.write(f"class {stub_type.Name}({stub_type.BaseType.Name}):\n")
                     else:
@@ -167,8 +168,20 @@ from {stub_types[0].Namespace} import *
 
                 constructors = stub_type.GetConstructors()
                 # TODO Array.Sort(constructors, MethodCompare);
-
+                good_constructors = []
                 for constructor in constructors:
+                    obsolete = False
+                    for attr in list(constructor.GetCustomAttributes(False)):
+                        if isinstance(attr, System.ObsoleteAttribute):
+                            obsolete = True
+                            continue
+                    if obsolete:
+                        print("Skipping Obsolete constructor:", constructor.Name)
+                        continue
+                    good_constructors.append(constructor)
+
+                for constructor in good_constructors:
+
                     if len(constructors) > 1:
                         f.write("\t@overload\n")
                     f.write("\tdef __init__(self")
@@ -195,7 +208,14 @@ from {stub_types[0].Namespace} import *
                         method_names[method.Name] = 1
 
                 for method in methods:
-                    # TODO check if obsolete
+                    obsolete = False
+                    for attr in list(method.GetCustomAttributes(False)):
+                        if isinstance(attr, System.ObsoleteAttribute):
+                            obsolete = True
+                            continue
+                    if obsolete:
+                        print("Skipping Obsolete method:", method.Name)
+                        continue
                     if method.DeclaringType != stub_type:
                         continue
                     parameters = method.GetParameters()
@@ -208,9 +228,9 @@ from {stub_types[0].Namespace} import *
                             ref_param_count += 1
 
                     if (
-                        method.IsSpecialName
-                        and method.Name.startswith("get_")
-                        or method.Name.startswith("set_")
+                            method.IsSpecialName
+                            and method.Name.startswith("get_")
+                            or method.Name.startswith("set_")
                     ):
                         prop_name = method.Name[4:]
                         if method.Name.startswith("get_"):
@@ -255,15 +275,11 @@ from {stub_types[0].Namespace} import *
                         f.write(types[0])
                     else:
                         f.write("Tuple[")
-                        for idx in range(len(types)):
-                            if idx > 0:
-                                f.write(", ")
-                            f.write(types[idx])
+                        f.write(", ".join(types))
                         f.write("]")
                     f.write(":...\n")
                 if len(sb) == len(class_start):
                     f.write("\tpass")
-            # File.WriteAllText(path, sb)
 
     def _safe_python_name(self, s: str):
         if s == "from":
@@ -272,11 +288,34 @@ from {stub_types[0].Namespace} import *
 
     def _to_python_type(self, s: str or System.Type):
         if not isinstance(s, str):
-            s = s.Name
+            s = str(s)
+
         if s.endswith("&"):
             s = s[0:-1]
-        if s.endswith("`1") or s.endswith("`2"):
-            s = s[0:-2]
+
+        if s.startswith("System.Collections.Generic.IEnumerable"):
+            return f"List[{self._to_python_type(s[s.find('[') + 1:-1])}]"
+
+        if s.endswith("[]"):
+            return f"List[{self._to_python_type(s[:-2])}]"
+
+        if s.startswith("System.Collections.Generic.Dictionary"):
+            inner = s[s.find('[') + 1:-1]
+            inner = inner.split(',')
+            return f"Dict[{self._to_python_type(inner[0])}, {self._to_python_type(inner[1])}]"
+
+        if s.startswith("NationalInstruments.VeriStand"):
+            return s.split('.')[-1]
+
+        if s.startswith("System.Collections.Generic.KeyValuePair"):
+            inner = s[s.find('[') + 1:-1]
+            inner = inner.split(',')
+            return f"Tuple[{self._to_python_type(inner[0])}, {self._to_python_type(inner[1])}]"
+
+        if s.startswith("System.Predicate"):
+            return "object"
+        if s.startswith("System.Collections.Generic.IEqualityComparer"):
+            return "object"
         if s.endswith("[]"):
             partial = self._to_python_type(s[0:-2])
             return f"List[{partial}]"
@@ -285,21 +324,28 @@ from {stub_types[0].Namespace} import *
             return f"List[{partial}]"
         if s.endswith("*"):
             return s[0:-1]
-        if s == "System.String" or "String":
+        if s == "System.Object" or s == "Object":
+            return "object"
+        if s == "System.Void" or s == "Void":
+            return "None"
+        if s == "System.String" or s == "String":
             return "str"
-        if s == "System.Double" or "Double":
+        if s == "System.Double" or s == "Double":
             return "float"
-        if s == "System.Boolean" or "Boolean":
+        if s == "System.Boolean" or s == "Boolean":
             return "bool"
-        if s == "System.Int32" or "Int32":
+        if s in ["System.Byte", "Byte", "System.Int16", "Int16", "System.UInt16", "UInt16", "System.Int32", "Int32", "System.UInt32", "UInt32", "System.Int64", "Int64", "System.UInt64", "UInt64"]:
             return "int"
+        if s.startswith("System."):
+            return s[7:]
+
         return s
 
     def _get_child_namespaces(self, parent_namespace, all_namespaces: List[str]):
         child_namespaces = []
         for ns in all_namespaces:
             if ns.startswith(parent_namespace + "."):
-                child_namespace = ns[0 : len(parent_namespace) + 1]
+                child_namespace = ns[0: len(parent_namespace) + 1]
                 if "." not in child_namespace:
                     child_namespaces.append(child_namespace)
         child_namespaces.sort()
@@ -307,6 +353,14 @@ from {stub_types[0].Namespace} import *
 
 
 if __name__ == "__main__":
-    StubBuilder().build_assembly_stubs(
-        "C:/Program Files/National Instruments/VeriStand 2020/NationalInstruments.VeriStand.SystemDefinitionAPI.dll"
-    )
+    root_dir = pathlib.Path("C:/Program Files/National Instruments/VeriStand 2021")
+
+    dlls = root_dir.glob('NationalInstruments.VeriStand*.dll')
+    for dll in dlls:
+        try:
+            StubBuilder().build_assembly_stubs(
+                str(dll), dest_path="C:/Users/tanne/PycharmProjects/pystubber/output"
+            )
+            print(dll, "DONE")
+        except Exception:
+            print(dll, "FAIL")
