@@ -1,3 +1,5 @@
+from typing import re
+
 import clr
 import logging
 
@@ -84,9 +86,16 @@ class PyType:
         self.imports.add('.'.join(namespace_path))
         return (namespace_path[-1])
 
+    def parse_parameter_type(self, value):
+        if value.ParameterType is not None:
+            if value.ParameterType.IsByRef:
+                return self.from_type(value.ParameterType.GetElementType())
+            else:
+                self.from_type(value.ParameterType)
     def from_parameter(self, value) -> str:
         logger.info(f"PYTYPE PARAMETER: {value} {value.Attributes}")
-        return_value = f"{value.Name}"
+        return_value = f"{str(value.Name)}"
+        parameter_type = self.parse_parameter_type(value)
         if value.ParameterType is not None:
             if value.ParameterType.IsByRef:
                 return_value += f":{self.from_type(value.ParameterType.GetElementType())}"
@@ -136,7 +145,7 @@ class PyType:
         else:
             logger.warning(f"UNKNOWN TYPE_INFO: {value}{value.Attributes}")
 
-    def format_name(self, name):
-        if name == "None":
-            return "NONE"
-        return name
+def format_name(name):
+    if name == "None":
+        return "NONE"
+    return name

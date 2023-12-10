@@ -1,11 +1,11 @@
-{% if property.CanRead and property.IsPublic %}
+{% if property.CanRead and property.GetGetMethod().IsPublic%}
 
 @property
 {{ pywrite(property.GetGetMethod()) }}
 {% endif %}
 
-{% if property.CanWrite and property.IsPublic %}
+{% if property.CanWrite and property.GetSetMethod().IsPublic%}
 
-@property
+@{{ property.Name }}.setter
 {{ pywrite(property.GetSetMethod()) }}
 {% endif %}

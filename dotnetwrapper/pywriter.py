@@ -7,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from dotnetwrapper.pytype import PyType
+from dotnetwrapper.pytype import PyType, format_name
 
 
 class PyWriter:
@@ -19,7 +19,7 @@ class PyWriter:
             "pytype": self.pytype.from_type,
             "pyparam": self.pytype.from_parameter,
             "pyparams": self.pytype.from_parameters,
-            "pyname": self.pytype.format_name,
+            "pyname": format_name,
             "pywrite": self.write_typeinfo,
             "type": type,
         }
@@ -31,18 +31,21 @@ class PyWriter:
         lstrip_blocks=True,
     )
     def write_typeinfo(self, type_def):
+        if type_def is None:
+            logger.warning(f"WRITE TYPE IS NONE")
+            return "None"
+        if str(type_def.MemberType) == "Property":
+            return self.write_property(type_def)
         if str(type_def.MemberType) == "TypeInfo":
             return self.write_type(type_def)
-        elif str(type_def.MemberType) == "NestedType":
+        if str(type_def.MemberType) == "NestedType":
             return self.write_nested_type(type_def)
-        elif str(type_def.MemberType) == "Method":
+
+        if str(type_def.MemberType) == "Method":
             return self.write_method(type_def)
-        elif str(type_def.MemberType) == "Constructor":
+        if str(type_def.MemberType) == "Constructor":
             return self.write_constructor(type_def)
-        elif str(type_def.MemberType) == "Property":
-            return self.write_property(type_def)
-        else:
-            logger.warning(f"WRITE TYPE UNKNOWN: {type_def} {type_def.Attributes}")
+        logger.warning(f"WRITE TYPE UNKNOWN: {type_def} {type_def.Attributes}")
 
     def write_enum(self, enum_info):
         logger.info(f"WRITE ENUM: {enum_info} {enum_info.Attributes}")
@@ -117,12 +120,29 @@ class PyWriter:
 
     def write_method(self, method):
         logger.info(f"WRITE METHOD: {method} {method.Attributes}")
-        if method.IsSpecialName:
-            if method.Name.startswith("get_") or method.Name.startswith("set_"):
-                logger.info(f"WRITE GETTER: {method} {method.Attributes}")
-                return self.env.get_template("method.j2").render(method=method, method_name=method.Name[4:], **self.get_utils())
+        if not method.IsPublic:
+            return ""
 
-        return self.env.get_template("method.j2").render(method=method, method_name=method.Name, **self.get_utils())
+        attr = method.GetCustomAttributes(False)
+        for a in attr:
+            if str(a) == "ObsoleteAttribute":
+                logger.warning(f"SKIPPING OBSOLETE METHOD: {method} {method.Attributes}")
+                return ""
+        method_name = method.Name
+        if method.IsSpecialName:
+            if method_name.startswith("get_") or method_name.startswith("set_"):
+                method_name = method_name[4:]
+                logger.info(f"WRITE GETTER: {method} {method.Attributes}")
+        return_types = [self.pytype.from_type(method.ReturnType)]
+        for p in method.GetParameters():
+            if p.IsOut:
+                return_types.append(self.pytype.parse_parameter_type(p))
+
+        if len(return_types) == 1:
+            return_type = return_types[0]
+        else:
+            return_type = f"Tuple[{', '.join(return_types)}]"
+        return self.env.get_template("method.j2").render(method=method, method_name=method_name, params=self.pytype.from_parameters(method.GetParameters()), returns=return_type, **self.get_utils())
 
 
     def write_nested_type(self, nested):

@@ -2,7 +2,7 @@ class {{ class_info.Name }}{% if class_info.BaseType.Name != "Object" %}({{ pyty
 
 {% set empty = True %}
 
-{% for constructor in class_info.GetConstructors() if constructor.IsPublic %}
+{% for constructor in class_info.GetConstructors() %}
 
     {{ pywrite(constructor) | indent }}
 
@@ -10,7 +10,7 @@ class {{ class_info.Name }}{% if class_info.BaseType.Name != "Object" %}({{ pyty
 
 {% endfor %}
 
-{% for prop in class_info.GetProperties() if prop.IsPublic %}
+{% for prop in class_info.GetProperties() %}
 
     {{ pywrite(prop) | indent }}
 
@@ -18,13 +18,14 @@ class {{ class_info.Name }}{% if class_info.BaseType.Name != "Object" %}({{ pyty
 
 {% endfor %}
 
-{% for method in class_info.GetMethods() if method.IsPublic %}
+{% for method in class_info.GetMethods() %}
 
     {{ pywrite(method) | indent }}
 
     {% set empty = False %}
 
 {% endfor %}
+
 
 {% if empty == True %}
 

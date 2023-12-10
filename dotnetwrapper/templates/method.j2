@@ -1,4 +1,5 @@
-{% if method.IsPublic %}
-def {{ method_name }}(self{{ pyparams(method.GetParameters()) }}) -> {{ pytype(method.ReturnType) }}:
-    ...
+{% if method.IsAbstract %}
+@abstractmethod
 {% endif %}
+def {{ method_name }}(self{{ params }}) -> {{ returns }}:
+    ...
