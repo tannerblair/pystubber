@@ -1,0 +1,4 @@
+class {{ enum.Name }}(Enum):
+{% for idx, name in enumerate(enum.GetEnumNames()) %}
+    {{ pyname(name) }} = {{ enum.GetEnumValues()[idx].value__ }}
+{% endfor %}

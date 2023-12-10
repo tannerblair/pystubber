@@ -1,0 +1,4 @@
+{% if method.IsPublic %}
+def {{ method_name }}(self{{ pyparams(method.GetParameters()) }}) -> {{ pytype(method.ReturnType) }}:
+    ...
+{% endif %}

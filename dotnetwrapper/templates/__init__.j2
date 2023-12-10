@@ -1,0 +1,6 @@
+import clr
+{% for lib in libs %}
+clr.AddReference("{{ lib.path }}")
+
+from {{ lib.name }} import *
+{% endfor %}

@@ -1,0 +1,4 @@
+class {{ interface.Name }}(ABC):
+{% for prop in interface.GetProperties() %}
+{{ pywrite(prop) | indent }}
+{% endfor %}

@@ -1,0 +1,17 @@
+class {{ class_info.Name }}{% if class_info.BaseType.Name != "Object" %}({{ pytype(class_info.BaseType) }}){% endif %}:
+{% if class_info.GetConstructors() == [] and class_info.GetProperties() == [] and class_info.GetMethods() == [] %}...{% endif %}
+{% for constructor in class_info.GetConstructors() %}
+{{ pywrite(constructor) | indent }}
+
+{% endfor %}
+
+{% for prop in class_info.GetProperties() %}
+{{ pywrite(prop) | indent }}
+
+{% endfor %}
+
+{% for method in class_info.GetMethods() %}
+{{ pywrite(method) | indent }}
+
+{% endfor %}
+
