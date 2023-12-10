@@ -12,8 +12,7 @@ class PyType:
         logger.info(f"PYTYPE CLASS: {value} {value.Attributes}")
         namespace_path = str(value).split('.')
         self.imports.add("typing.override")
-        if not value.IsByRef:
-            self.imports.add('.'.join(namespace_path))
+        self.imports.add('.'.join(namespace_path))
         return namespace_path[-1]
 
     def _from_known_type(self, value) -> str:
@@ -62,6 +61,7 @@ class PyType:
             "System.Predicate": ("typing.Callable", "Callable"),
             "System.Collections.Generic.Dictionary": ("typing.Dict", "Dict"),
             "System.Collections.Generic.KeyValuePair": ("typing.Tuple", "Tuple"),
+            "System.Collections.Generic.IEqualityComparer": ("typing.Callable", "Callable"),
         }
 
         for dotnet_type, python_type in generic_types.items():
@@ -81,15 +81,17 @@ class PyType:
     def _from_value_type(self, value) -> str:
         logger.info(f"PYTYPE VALUETYPE: {value} {value.Attributes}")
         namespace_path = str(value).split('.')
-        if not value.IsByRef:
-            self.imports.add('.'.join(namespace_path))
+        self.imports.add('.'.join(namespace_path))
         return (namespace_path[-1])
 
     def from_parameter(self, value) -> str:
         logger.info(f"PYTYPE PARAMETER: {value} {value.Attributes}")
         return_value = f"{value.Name}"
         if value.ParameterType is not None:
-            return_value += f":{self.from_type(value.ParameterType)}"
+            if value.ParameterType.IsByRef:
+                return_value += f":{self.from_type(value.ParameterType.GetElementType())}"
+            else:
+                return_value += f":{self.from_type(value.ParameterType)}"
         if value.HasDefaultValue:
             return_value += f" = {value.RawDefaultValue}"
         return return_value
@@ -104,8 +106,6 @@ class PyType:
         lookup = self._from_known_type(value)
         if lookup:
             return lookup
-        if value.IsByRef:
-            self.from_type(value.GetElementType)
         if value.IsNested:
             return "None"
         if value.IsArray:
@@ -117,14 +117,18 @@ class PyType:
         if value.IsEnum:
             return self._from_enum(value)
 
+        if value.IsInterface:
+            self.imports.add("abc.ABC")
+            self.imports.add("abc.abstractmethod")
+            return self._from_interface(value)
+
         if value.IsValueType:
             return self._from_value_type(value)
 
         if value.IsClass:
             return self._from_class(value)
 
-        if value.IsInterface:
-            return self._from_interface(value)
+
 
         # if value.IsDelegate:
         #     return self._from_delegate(value)

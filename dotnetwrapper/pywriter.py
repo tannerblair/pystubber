@@ -26,7 +26,7 @@ class PyWriter:
 
     env = Environment(
         loader=PackageLoader("dotnetwrapper"),
-        # autoescape=select_autoescape(),
+        autoescape=select_autoescape(),
         trim_blocks=True,
         lstrip_blocks=True,
     )
