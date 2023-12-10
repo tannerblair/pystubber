@@ -1,9 +1,12 @@
 import shutil
-
+import black
 import clr
 import pathlib
 
 import logging
+
+from black import InvalidInput
+
 logging.basicConfig()
 logging.root.setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -14,7 +17,7 @@ from System import BadImageFormatException
 
 if __name__ == "__main__":
     root_dir = pathlib.Path("C:/Program Files/National Instruments/VeriStand 2021")
-    out_dir = pathlib.Path(__file__).parent / "output"
+    out_dir = pathlib.Path(__file__).parent.parent / "output"
 
     dll_paths = root_dir.glob('NationalInstruments.VeriStand.SystemDef*.dll')
     for dll_path in dll_paths:
@@ -28,8 +31,15 @@ if __name__ == "__main__":
 
             assembly = Assembly.LoadFrom(str(dll_path))
             [print(m) for m in assembly.GetModules()]
+            python_code = PyWriter().write_assembly(assembly)
+            mode = black.FileMode()
+            mode.is_pyi = True
+            try:
+                python_code = black.format_file_contents(python_code, fast=True, mode=mode)
+            except InvalidInput as e:
+                logging.warning(e)
             with (out_path / "__init__.pyi").open('w') as f:
-                f.write(PyWriter().write_assembly(assembly))
+                f.write(python_code)
 
             with (out_path / "__init__.py").open('w') as f:
                 f.write("import clr\n\r")

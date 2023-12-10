@@ -1,5 +1,6 @@
 {% if method.IsAbstract %}
 @abstractmethod
 {% endif %}
+@override
 def {{ method_name }}(self{{ params }}) -> {{ returns }}:
     ...

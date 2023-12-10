@@ -106,9 +106,12 @@ class PyType:
         return return_value
 
     def from_parameters(self, parameters) -> str:
+        if not parameters:
+            return ""
         params = []
         for p in parameters:
             params.append(self.from_parameter(p))
+
         return ', ' + ', '.join(params)
 
     def from_type(self, value: TypeInfo) -> str:
